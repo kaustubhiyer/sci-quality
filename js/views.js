@@ -5,6 +5,17 @@ window.SCI = window.SCI || {};
 SCI.views = (() => {
   const P = () => SCI.parts;
   const el = (...a) => SCI.ui.el(...a);
+  const iconBtn = (name, cls, title) => {
+    const b = el('button', 'icon-btn' + (cls ? ' ' + cls : ''));
+    b.append(SCI.icon(name));
+    if (title) b.title = title;
+    return b;
+  };
+  const btnWithIcon = (label, name, cls) => {
+    const b = el('button', cls);
+    b.append(SCI.icon(name), document.createTextNode(' ' + label));
+    return b;
+  };
 
   const fmtDT = ts => new Date(ts).toLocaleString('en-IN', {
     day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
@@ -366,7 +377,7 @@ SCI.views = (() => {
     root.innerHTML = '';
     const dispatches = (await SCI.db.all('dispatches')).sort((a, b) => (a.status === 'open' ? 0 : 1) - (b.status === 'open' ? 0 : 1) || b.createdAt - a.createdAt);
 
-    const add = el('button', 'btn btn-primary bulk-btn', '+ New dispatch');
+    const add = btnWithIcon('New dispatch', 'plus', 'btn btn-primary bulk-btn');
     add.addEventListener('click', () => newDispatchModal(() => renderDispatch(root)));
     root.append(add);
 
@@ -425,8 +436,7 @@ SCI.views = (() => {
         const row = el('div', 'pd-piece-row');
         row.append(el('span', null, P().label(p)));
         if (d.status === 'open') {
-          const x = el('button', 'photo-del', '✕');
-          x.title = 'Remove from dispatch';
+          const x = iconBtn('trash', 'danger', 'Remove from dispatch');
           x.addEventListener('click', async () => {
             d.pieceIds = d.pieceIds.filter(x2 => x2 !== p.id);
             await SCI.db.put('dispatches', d);
@@ -542,7 +552,7 @@ SCI.views = (() => {
       return;
     }
 
-    const repBtn = el('button', 'btn btn-secondary bulk-btn', '📄 Monthly report PDF…');
+    const repBtn = btnWithIcon('Monthly report PDF…', 'file', 'btn btn-secondary bulk-btn');
     repBtn.addEventListener('click', () => monthReportModal());
     root.append(repBtn);
 
@@ -922,7 +932,7 @@ SCI.views = (() => {
     (settings.tpis || []).forEach((t, i) => {
       const row = el('div', 'pd-piece-row');
       row.append(el('span', null, `${t.name} <${t.email}>${t.pinHash ? ' · PIN set' : ''}`));
-      const x = el('button', 'photo-del', '✕');
+      const x = iconBtn('trash', 'danger', 'Remove TPI');
       x.addEventListener('click', async () => {
         if (!confirm('Remove ' + t.name + '?')) return;
         settings.tpis.splice(i, 1);
@@ -984,7 +994,7 @@ SCI.views = (() => {
     bkCard.append(el('p', 'modal-hint', settings.lastBackupAt
       ? 'Last backup: ' + fmtDT(settings.lastBackupAt)
       : 'Never backed up — everything lives only on this device!'));
-    const bk = el('button', 'btn btn-primary', 'Back up now (share file)');
+    const bk = btnWithIcon('Back up now (share file)', 'download', 'btn btn-primary');
     bk.addEventListener('click', async () => {
       await SCI.backup.exportAll();
       renderSettings(root);

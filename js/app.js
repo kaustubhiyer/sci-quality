@@ -28,7 +28,9 @@
     const box = el('div', 'modal-box');
     const head = el('div', 'modal-head');
     head.append(el('h3', null, title));
-    const closeBtn = el('button', 'icon-btn', '✕');
+    const closeBtn = el('button', 'icon-btn');
+    closeBtn.append(SCI.icon('x'));
+    closeBtn.title = 'Close';
     head.append(closeBtn);
     box.append(head);
     const bodyWrap = el('div', 'modal-body');
@@ -83,7 +85,8 @@
     wrap.innerHTML = '';
     Object.values(SCI.forms).forEach(schema => {
       const card = el('button', 'form-card');
-      const icon = el('div', 'card-icon', schema.icon || '📄');
+      const icon = el('div', 'card-icon');
+      icon.append(schema.iconName ? SCI.icon(schema.iconName) : document.createTextNode(schema.icon || '📄'));
       const body = el('div');
       body.append(el('div', 'card-name', schema.title), el('div', 'card-desc', schema.description || ''));
       card.append(icon, body);
@@ -147,7 +150,8 @@
       const chip = el('span', 'chip ' + (s.status || 'draft'), s.statusLabel || 'Draft');
 
       const actions = el('div', 'ri-actions');
-      const btnDup = el('button', 'icon-btn', '⧉');
+      const btnDup = el('button', 'icon-btn');
+      btnDup.append(SCI.icon('copy'));
       btnDup.title = 'Duplicate (same part, fresh readings)';
       btnDup.addEventListener('click', async () => {
         const copy = newReport(schema, duplicateData(schema, report.data));
@@ -155,8 +159,9 @@
         openForm(copy);
         SCI.toast('Duplicated — readings cleared');
       });
-      const btnDel = el('button', 'icon-btn', '🗑');
-      btnDel.title = 'Delete';
+      const btnDel = el('button', 'icon-btn danger');
+      btnDel.append(SCI.icon('trash'));
+      btnDel.title = 'Delete report';
       btnDel.addEventListener('click', async () => {
         if (!confirm('Delete this report? Piece records created from it are kept.')) return;
         await SCI.db.remove(report.id);
@@ -680,6 +685,7 @@
   $('#report-search').addEventListener('input', renderReportList);
 
   /* ---------- boot ---------- */
+  SCI.hydrateIcons();
   showTab('inspect');
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
   SCI.backup.nagIfStale();

@@ -1,11 +1,12 @@
 /* Service worker — precaches the app shell so it works fully offline.
  * Bump VERSION whenever any file changes so installed tablets pick up updates. */
-const VERSION = 'sci-quality-v5';
+const VERSION = 'sci-quality-v6';
 const PRECACHE = [
   './',
   './index.html',
   './manifest.webmanifest',
   './css/styles.css',
+  './js/icons.js',
   './js/db.js',
   './js/crypto.js',
   './js/signature.js',

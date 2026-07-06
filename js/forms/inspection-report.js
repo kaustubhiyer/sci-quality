@@ -3,6 +3,7 @@ SCI.registerForm({
   id: 'inspection-report',
   title: 'Inspection Report',
   icon: '📐',
+  iconName: 'ruler',
   description: 'Dimensional & quality inspection of fabricated parts',
 
   sections: [

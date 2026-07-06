@@ -46,12 +46,12 @@
   <!-- ============ FORM VIEW (overlay) ============ -->
   <div id="view-form" class="view form-overlay" hidden>
     <header class="form-topbar">
-      <button id="btn-back" class="icon-btn" title="Back" aria-label="Back">&#10094;</button>
+      <button id="btn-back" class="icon-btn" title="Back" aria-label="Back"><span data-ico="chevron-left"></span></button>
       <div class="form-topbar-title">
         <h1 id="form-title">Report</h1>
         <span id="save-status" class="save-status"></span>
       </div>
-      <button id="btn-copy-from" class="icon-btn topbar-right" title="Copy fields from another report">⧉ Copy from…</button>
+      <button id="btn-copy-from" class="icon-btn topbar-right" title="Copy fields from another report"><span data-ico="copy"></span> Copy from…</button>
     </header>
     <main id="form-sections" class="form-main"></main>
     <div class="action-bar">
@@ -63,11 +63,11 @@
 
   <!-- ============ TAB BAR ============ -->
   <nav id="tab-bar" class="tab-bar">
-    <button id="nav-inspect" class="tab-btn on"><span class="tab-ico">📋</span>Inspect</button>
-    <button id="nav-parts" class="tab-btn"><span class="tab-ico">🔩</span>Parts</button>
-    <button id="nav-dispatch" class="tab-btn"><span class="tab-ico">🚚</span>Dispatch</button>
-    <button id="nav-stats" class="tab-btn"><span class="tab-ico">📈</span>Stats</button>
-    <button id="nav-settings" class="tab-btn"><span class="tab-ico">⚙️</span>Settings</button>
+    <button id="nav-inspect" class="tab-btn on"><span class="tab-ico" data-ico="clipboard"></span>Inspect</button>
+    <button id="nav-parts" class="tab-btn"><span class="tab-ico" data-ico="box"></span>Parts</button>
+    <button id="nav-dispatch" class="tab-btn"><span class="tab-ico" data-ico="truck"></span>Dispatch</button>
+    <button id="nav-stats" class="tab-btn"><span class="tab-ico" data-ico="chart"></span>Stats</button>
+    <button id="nav-settings" class="tab-btn"><span class="tab-ico" data-ico="settings"></span>Settings</button>
   </nav>
 
   <div id="modal-root"></div>
@@ -75,6 +75,7 @@
 
   <script src="vendor/jspdf.umd.min.js"></script>
   <script src="vendor/jspdf.plugin.autotable.min.js"></script>
+  <script src="js/icons.js"></script>
   <script src="js/db.js"></script>
   <script src="js/crypto.js"></script>
   <script src="js/signature.js"></script>
