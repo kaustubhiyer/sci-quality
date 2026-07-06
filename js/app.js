@@ -314,31 +314,30 @@
       buildTable();
     });
 
-    const ctl = el('div', 'readings-ctl');
-    ctl.append(el('span', null, 'Readings per parameter:'));
-    const selN = el('select');
-    for (let i = 1; i <= (sec.maxReadings || 10); i++) {
-      const o = el('option', null, String(i));
-      o.value = i;
-      selN.append(o);
-    }
-    selN.value = m.readings;
-    selN.addEventListener('change', () => {
-      m.readings = parseInt(selN.value, 10);
-      markDirty();
-      buildTable();
-    });
-    ctl.append(selN);
-
-    tools.append(btnAdd, ctl, el('span', 'tol-hint', 'Reading column i = piece with serial (start + i − 1). Out-of-tolerance turns red.'));
+    tools.append(btnAdd, el('span', 'tol-hint', 'One column per piece (follows Qty) — each cell is that parameter measured on that serial number. Out-of-tolerance turns red.'));
     card.append(tools);
 
+    /* column count follows Qty (1–10); serial headers follow Piece Results start */
+    const colCount = () => {
+      const q = parseInt(current.report.data.qty, 10);
+      if (q >= 1) return Math.min(q, sec.maxReadings || 10);
+      return Math.min(m.readings || sec.defaultReadings || 5, sec.maxReadings || 10);
+    };
+    const serialStart = () => {
+      const pr = current.report.data.pieceResults;
+      return pr && pr.start ? pr.start : 1;
+    };
+    let builtCols = null, builtStart = null;
+
     function buildTable() {
+      m.readings = colCount();
+      builtCols = m.readings;
+      builtStart = serialStart();
       table.innerHTML = '';
       const thead = el('thead');
       const hr = el('tr');
       ['#', 'Parameter', 'Specification', 'Tolerance ±', 'Instrument', 'Tapped hole'].forEach(h => hr.append(el('th', null, h)));
-      for (let i = 1; i <= m.readings; i++) hr.append(el('th', null, String(i)));
+      for (let i = 0; i < m.readings; i++) hr.append(el('th', null, 'S/N ' + (builtStart + i)));
       hr.append(el('th', null, ''));
       thead.append(hr);
       table.append(thead);
@@ -433,6 +432,10 @@
     }
 
     buildTable();
+    /* rebuild only when Qty or serial start actually changed */
+    current._mSync = () => {
+      if (colCount() !== builtCols || serialStart() !== builtStart) buildTable();
+    };
   }
 
   SCI.parseTol = t => {
@@ -467,6 +470,7 @@
       if (!d.pieceResults) {
         const start = (await SCI.parts.maxSerial(d.woNo, d.partNo)) + 1;
         d.pieceResults = { start, results: Array(qty).fill(null) };
+        if (current._mSync) current._mSync(); // headers can now show real serials
       }
       const pr = d.pieceResults;
       while (pr.results.length < qty) pr.results.push(null);
@@ -481,6 +485,7 @@
         pr.start = parseInt(startIn.value, 10) || 1;
         markDirty();
         drawRows();
+        if (current._mSync) current._mSync(); // refresh S/N column headers
       });
       startRow.append(startIn);
       const suggest = el('button', 'btn-add', 'Suggest from readings');
@@ -537,9 +542,11 @@
     current._prBuild = build; // rebuilt when WO/Part/Qty change (delegated below)
   }
 
-  /* single delegated listener: refresh piece results when detail fields change */
+  /* single delegated listener: refresh piece results + table columns when detail fields change */
   $('#form-sections').addEventListener('input', e => {
-    if (current && current._prBuild && e.target.closest('.fields-grid')) current._prBuild();
+    if (!current || !e.target.closest('.fields-grid')) return;
+    if (current._prBuild) current._prBuild();
+    if (current._mSync) current._mSync();
   });
 
   /* --- checks --- */

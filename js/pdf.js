@@ -120,8 +120,9 @@ SCI.pdf = (() => {
 
     const n = m.readings;
     const hasTap = rows.some(r => r.tapped);
+    const start = data.pieceResults && data.pieceResults.start ? data.pieceResults.start : null;
     const head = [['#', 'Parameter', 'Specification', 'Tolerance', 'Instrument',
-      ...Array.from({ length: n }, (_, i) => 'R' + (i + 1)),
+      ...Array.from({ length: n }, (_, i) => start ? 'S/N ' + (start + i) : 'R' + (i + 1)),
       ...(hasTap ? ['Tapping'] : [])]];
     const body = rows.map((r, i) => [
       i + 1, r.parameter, r.spec,

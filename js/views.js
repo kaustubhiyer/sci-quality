@@ -393,7 +393,28 @@ SCI.views = (() => {
         el('div', 'ri-sub', `${d.customer || ''}${d.date ? ' · ' + d.date : ''} · ${d.pieceIds.length} part(s)`),
       );
       body.addEventListener('click', () => dispatchModal(d.id, () => renderDispatch(root)));
-      item.append(body, el('span', 'chip ' + (d.status === 'open' ? 'st-info' : 'st-done'), d.status === 'open' ? 'Open' : 'Dispatched'));
+
+      const del = iconBtn('trash', 'danger', d.status === 'open'
+        ? 'Delete dispatch (parts return to Ready)'
+        : 'Delete dispatch record');
+      del.addEventListener('click', async () => {
+        const msg = d.status === 'open'
+          ? `Delete "${d.name}"? Its ${d.pieceIds.length} part(s) will return to Ready to dispatch.`
+          : `Delete the record of "${d.name}"? The parts themselves stay Dispatched.`;
+        if (!confirm(msg)) return;
+        if (d.status === 'open') {
+          for (const pid of d.pieceIds) {
+            try {
+              await P().transition(pid, P().ST.READY, 'dispatch', 'Dispatch deleted: ' + d.name, pc => { pc.dispatchId = null; });
+            } catch (e) { /* piece may have been deleted */ }
+          }
+        }
+        await SCI.db.del('dispatches', d.id);
+        SCI.toast('Dispatch deleted');
+        renderDispatch(root);
+      });
+
+      item.append(body, el('span', 'chip ' + (d.status === 'open' ? 'st-info' : 'st-done'), d.status === 'open' ? 'Open' : 'Dispatched'), del);
       list.append(item);
     });
   }
