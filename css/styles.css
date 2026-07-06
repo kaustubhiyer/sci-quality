@@ -68,12 +68,15 @@ h1, h2, h3, h4 { margin: 0; }
 .brand-header.compact { padding: max(14px, env(safe-area-inset-top)) 20px 15px; }
 .brand-mark {
   width: 44px; height: 44px;
-  border-radius: 13px;
-  background: linear-gradient(145deg, #f39c1f, var(--accent-dark));
-  color: #fff;
+  border-radius: 11px;
+  background: linear-gradient(180deg, #f0d064, #d3a62c);
+  color: #1a1814;
+  border: 2px solid rgba(26, 24, 20, 0.88);
   display: grid; place-items: center;
-  font-weight: 800; font-size: 16px; letter-spacing: 0.5px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255,255,255,0.25);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 700; font-size: 18px; letter-spacing: 0.5px;
+  transform: scaleY(1.08);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.4);
   flex-shrink: 0;
 }
 .brand-text h1 { font-size: 17.5px; font-weight: 700; letter-spacing: 0.2px; }

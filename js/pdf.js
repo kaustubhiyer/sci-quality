@@ -34,14 +34,24 @@ SCI.pdf = (() => {
     doc.setFillColor(...AMBER);
     doc.rect(0, 22, PAGE_W, 1.4, 'F');
 
+    /* SCI logo block: gold field, ink frame, tall serif letters */
+    doc.setFillColor(232, 197, 84);
+    doc.setDrawColor(26, 24, 20);
+    doc.setLineWidth(0.7);
+    doc.roundedRect(MARGIN, 4, 14, 14, 1.6, 1.6, 'FD');
+    doc.setFont('times', 'bold');
+    doc.setFontSize(13);
+    doc.setTextColor(26, 24, 20);
+    doc.text('SCI', MARGIN + 7, 13.6, { align: 'center' });
+
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(15);
-    doc.text(COMPANY, MARGIN, 10.5);
+    doc.text(COMPANY, MARGIN + 18.5, 10.5);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(220, 228, 236);
-    doc.text('Steel & Sheet Metal Fabrication — Quality Assurance', MARGIN, 16.5);
+    doc.text('Steel & Sheet Metal Fabrication — Quality Assurance', MARGIN + 18.5, 16.5);
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(13);
