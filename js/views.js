@@ -542,6 +542,10 @@ SCI.views = (() => {
       return;
     }
 
+    const repBtn = el('button', 'btn btn-secondary bulk-btn', '📄 Monthly report PDF…');
+    repBtn.addEventListener('click', () => monthReportModal());
+    root.append(repBtn);
+
     const chartCard = (title, w, h, draw) => {
       const c = el('div', 'card');
       c.append(el('h3', null, title));
@@ -641,11 +645,11 @@ SCI.views = (() => {
     });
   }
 
-  /* grouped bars: inspected vs accepted per month (last 6 months) */
-  function drawMonthly(cv, pieces) {
+  /* grouped bars: inspected vs accepted per month (6 months ending at `end`) */
+  function drawMonthly(cv, pieces, end) {
     const ctx = cv.getContext('2d');
     const months = [];
-    const now = new Date();
+    const now = end || new Date();
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       months.push({
@@ -694,6 +698,188 @@ SCI.views = (() => {
     ctx.fillStyle = '#1d2530'; ctx.fillText('Inspected', x0 + 18, 15);
     ctx.fillStyle = '#1e7d43'; ctx.fillRect(x0 + 105, 4, 12, 12);
     ctx.fillStyle = '#1d2530'; ctx.fillText('Accepted', x0 + 123, 15);
+  }
+
+  /* ---- monthly report PDF ---- */
+  async function monthlyStats(y, m) {
+    const ST = P().ST;
+    const pieces = await P().all();
+    const inMonth = ts => { const d = new Date(ts); return d.getFullYear() === y && d.getMonth() === m; };
+
+    /* cohort: pieces first inspected in this month */
+    const cohort = pieces.filter(p => p.history.length && inMonth(p.history[0].at));
+    const byS = {};
+    Object.values(ST).forEach(st => byS[st] = []);
+    cohort.forEach(p => byS[p.status].push(p));
+    const accepted = byS.ready.length + byS.in_dispatch.length + byS.dispatched.length;
+    const rejected = byS.rejected.length;
+
+    /* decision events that happened during this month (any piece) */
+    const DECISIONS = [ST.AWAITING_TPI, ST.DEVIATION, ST.CHALLAN, ST.REWORK, ST.REJECTED];
+    let intOk = 0, intAll = 0, tpiOk = 0, tpiAll = 0, dispatched = 0;
+    const problems = {};
+    pieces.forEach(p => p.history.forEach(h => {
+      if (!inMonth(h.at)) return;
+      if (h.by === 'internal' && DECISIONS.includes(h.to)) { intAll++; if (h.to === ST.AWAITING_TPI) intOk++; }
+      if (h.by === 'tpi') { tpiAll++; if (h.to === ST.READY) tpiOk++; }
+      if (h.by === 'dispatch' && h.to === ST.DISPATCHED) dispatched++;
+      if ((h.by === 'internal' || h.by === 'tpi') && ['deviation', 'challan', 'rework', 'rejected'].includes(h.to)) {
+        problems[p.partNo] = problems[p.partNo] || { n: 0, desc: p.partDescription };
+        problems[p.partNo].n++;
+      }
+    }));
+
+    return {
+      pieces, cohort, byS, accepted, rejected,
+      inProcess: cohort.length - accepted - rejected,
+      internalRate: intAll ? Math.round(100 * intOk / intAll) : null,
+      tpiRate: tpiAll ? Math.round(100 * tpiOk / tpiAll) : null,
+      dispatched,
+      problems: Object.entries(problems).sort((a, b) => b[1].n - a[1].n).slice(0, 10),
+    };
+  }
+
+  function monthReportModal() {
+    const body = el('div');
+    body.append(el('p', 'modal-hint', 'Pick a month — the report covers parts first inspected in that month plus all decisions made during it.'));
+    const sel = el('select', 'modal-input');
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const o = el('option', null, d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }));
+      o.value = d.getFullYear() + '-' + d.getMonth();
+      sel.append(o);
+    }
+    body.append(sel);
+    const gen = async () => {
+      const [y, m] = sel.value.split('-').map(Number);
+      const label = new Date(y, m, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+      const ms = await monthlyStats(y, m);
+      if (!ms.cohort.length && ms.internalRate === null && ms.tpiRate === null && !ms.dispatched) {
+        SCI.toast('No activity recorded in ' + label);
+        return null;
+      }
+      return { doc: buildMonthlyPdf(y, m, label, ms), label };
+    };
+    SCI.ui.modal({ title: 'Monthly quality report', body, actions: [
+      { label: 'Save PDF', cls: 'btn-secondary', onClick: async () => {
+        const r = await gen();
+        if (r) { r.doc.save('SCI-Monthly-Report_' + r.label.replace(/\s+/g, '-') + '.pdf'); SCI.toast('PDF saved to Downloads / Files'); }
+      } },
+      { label: 'Share / Email', cls: 'btn-primary', onClick: async () => {
+        const r = await gen();
+        if (!r) return;
+        const file = new File([r.doc.output('blob')], 'SCI-Monthly-Report_' + r.label.replace(/\s+/g, '-') + '.pdf', { type: 'application/pdf' });
+        await SCI.shareFiles([file], 'Monthly quality report — ' + r.label,
+          'Dear Sir/Madam,\n\nPlease find attached the monthly quality report for ' + r.label + ' from Shri Cauvery Industries.\n\nRegards,\nShri Cauvery Industries');
+      } },
+    ] });
+  }
+
+  /* render a chart offscreen at 2x, on white, as JPEG (keeps the PDF small) */
+  function chartPng(w, h, draw) {
+    const cv = document.createElement('canvas');
+    cv.width = w * 2; cv.height = h * 2;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.scale(2, 2);
+    /* draw fns read cv.width/height — give them logical size */
+    const logical = { width: w, height: h, getContext: () => ctx };
+    draw(logical);
+    return cv.toDataURL('image/jpeg', 0.85);
+  }
+
+  function buildMonthlyPdf(y, m, label, ms) {
+    const pdf = SCI.pdf;
+    const { W, MARGIN } = pdf.PAGE;
+    const doc = new jspdf.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    let yPos = pdf.brandHeader(doc, 'Monthly Report — ' + label);
+
+    /* topline numbers */
+    yPos = pdf.sectionTitle(doc, 'Summary', yPos);
+    const stats = [
+      ['Parts inspected', ms.cohort.length],
+      ['Accepted', ms.accepted],
+      ['Rejected / scrapped', ms.rejected],
+      ['In process', ms.inProcess],
+      ['Dispatched this month', ms.dispatched],
+      ['Internal acceptance', ms.internalRate === null ? '—' : ms.internalRate + '%'],
+      ['TPI acceptance', ms.tpiRate === null ? '—' : ms.tpiRate + '%'],
+    ];
+    const colW = (W - MARGIN * 2) / stats.length;
+    stats.forEach(([lbl, v], i) => {
+      const x = MARGIN + i * colW;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(15);
+      doc.setTextColor(28, 61, 90);
+      doc.text(String(v), x, yPos + 4);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(100, 116, 139);
+      doc.text(doc.splitTextToSize(lbl.toUpperCase(), colW - 4), x, yPos + 9);
+    });
+    yPos += 20;
+
+    /* charts, two per row */
+    const chartW = 130, gap = (W - MARGIN * 2 - chartW * 2);
+    const acceptedPie = chartPng(520, 250, cv => drawPie(cv, [
+      ['Accepted', ms.accepted, '#1e7d43'],
+      ['Rejected', ms.rejected, '#c0392b'],
+      ['In process', ms.inProcess, '#e8890c'],
+    ].filter(([, v]) => v > 0), 0));
+    const statusDonut = chartPng(520, 250, cv => drawPie(cv,
+      Object.values(P().ST)
+        .map(st => [P().LABELS[st], ms.byS[st].length, STATUS_COLORS[st]])
+        .filter(([, v]) => v > 0), 52));
+    const trend = chartPng(560, 260, cv => drawMonthly(cv, ms.pieces, new Date(y, m, 1)));
+    const rates = chartPng(560, 150, cv => drawHBars(cv, [
+      ['Internal', ms.internalRate],
+      ['TPI', ms.tpiRate],
+    ]));
+
+    if (ms.cohort.length) {
+      yPos = pdf.sectionTitle(doc, 'This month\'s parts', yPos);
+      doc.addImage(acceptedPie, 'JPEG', MARGIN, yPos, chartW, chartW * 250 / 520);
+      doc.addImage(statusDonut, 'JPEG', MARGIN + chartW + gap, yPos, chartW, chartW * 250 / 520);
+      yPos += chartW * 250 / 520 + 8;
+    }
+
+    yPos = pdf.sectionTitle(doc, 'Trend & rates', yPos);
+    doc.addImage(trend, 'JPEG', MARGIN, yPos, chartW, chartW * 260 / 560);
+    doc.addImage(rates, 'JPEG', MARGIN + chartW + gap, yPos, chartW, chartW * 150 / 560);
+    yPos += chartW * 260 / 560 + 6;
+
+    /* second page: lists */
+    doc.addPage();
+    let y2 = 16;
+    const listBlock = (title, rows) => {
+      y2 = pdf.sectionTitle(doc, title, y2);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(30, 37, 48);
+      if (!rows.length) {
+        doc.setTextColor(100, 116, 139);
+        doc.text('None.', MARGIN + 1, y2);
+        y2 += 7;
+      } else {
+        rows.forEach(t => {
+          if (y2 > 190) { doc.addPage(); y2 = 16; }
+          doc.text('• ' + t, MARGIN + 1, y2);
+          y2 += 5.5;
+        });
+        y2 += 3;
+      }
+    };
+    const pieceLine = p => `${P().label(p)}${p.partDescription ? ' — ' + p.partDescription : ''}`;
+    listBlock('Deviation parts (current)', ms.byS.deviation.map(pieceLine));
+    listBlock('Delivery challan parts (current)', ms.byS.challan.map(pieceLine));
+    listBlock('Scrapped / rejected parts', ms.byS.rejected.map(pieceLine));
+    listBlock('Most rejected part numbers (decisions this month)',
+      ms.problems.map(([pn, { n, desc }]) => `${pn}${desc ? ' — ' + desc : ''}: ${n} not-OK decision(s)`));
+
+    pdf.brandFooter(doc);
+    return doc;
   }
 
   /* horizontal % bars */

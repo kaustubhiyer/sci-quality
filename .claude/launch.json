@@ -4,8 +4,8 @@
     {
       "name": "sci-quality",
       "runtimeExecutable": "C:\\Users\\scl\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
-      "runtimeArgs": ["-m", "http.server", "8734", "--bind", "127.0.0.1"],
-      "port": 8734
+      "runtimeArgs": ["-m", "http.server", "8737", "--bind", "127.0.0.1"],
+      "port": 8737
     }
   ]
 }

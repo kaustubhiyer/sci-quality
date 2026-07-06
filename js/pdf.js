@@ -14,7 +14,7 @@ SCI.pdf = (() => {
 
   function build(schema, data) {
     const doc = new jspdf.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    let y = header(doc, schema);
+    let y = header(doc, schema.title);
 
     schema.sections.forEach(sec => {
       if (sec.type === 'fields') y = drawFields(doc, sec, data, y);
@@ -28,7 +28,7 @@ SCI.pdf = (() => {
     return doc;
   }
 
-  function header(doc, schema) {
+  function header(doc, title) {
     doc.setFillColor(...NAVY);
     doc.rect(0, 0, PAGE_W, 22, 'F');
     doc.setFillColor(...AMBER);
@@ -46,7 +46,7 @@ SCI.pdf = (() => {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(13);
     doc.setTextColor(255, 255, 255);
-    doc.text(schema.title.toUpperCase(), PAGE_W - MARGIN, 13.5, { align: 'right' });
+    doc.text(title.toUpperCase(), PAGE_W - MARGIN, 13.5, { align: 'right' });
     return 30;
   }
 
@@ -235,5 +235,11 @@ SCI.pdf = (() => {
     getBlob(schema, data) {
       return build(schema, data).output('blob');
     },
+    /* shared branding for non-form PDFs (e.g. monthly report) */
+    brandHeader: header,
+    brandFooter: footer,
+    sectionTitle,
+    PAGE: { W: PAGE_W, H: PAGE_H, MARGIN },
+    NAVY, GREY,
   };
 })();
