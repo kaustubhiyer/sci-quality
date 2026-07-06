@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#1c3d5a">
+  <title>SCI Quality — Shri Cauvery Industries</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- ============ HOME VIEW ============ -->
+  <div id="view-home" class="view">
+    <header class="brand-header">
+      <div class="brand-mark">SCI</div>
+      <div class="brand-text">
+        <h1>Shri Cauvery Industries</h1>
+        <p>Quality &amp; Inspection</p>
+      </div>
+    </header>
+
+    <main class="home-main">
+      <section>
+        <h2 class="section-label">New Report</h2>
+        <div id="form-cards" class="form-cards"></div>
+      </section>
+
+      <section>
+        <div class="recent-head">
+          <h2 class="section-label">Recent Reports</h2>
+          <input type="search" id="report-search" class="search-input" placeholder="Search part, P.O., customer…">
+        </div>
+        <div id="report-list" class="report-list"></div>
+        <p id="report-empty" class="empty-note" hidden>No saved reports yet. Start one above.</p>
+      </section>
+    </main>
+
+    <footer class="home-footer">Data is stored on this device only.</footer>
+  </div>
+
+  <!-- ============ FORM VIEW ============ -->
+  <div id="view-form" class="view" hidden>
+    <header class="form-topbar">
+      <button id="btn-back" class="icon-btn" title="Back to home" aria-label="Back">&#10094;</button>
+      <div class="form-topbar-title">
+        <h1 id="form-title">Report</h1>
+        <span id="save-status" class="save-status"></span>
+      </div>
+    </header>
+
+    <main id="form-sections" class="form-main"></main>
+
+    <div class="action-bar">
+      <button id="btn-save" class="btn btn-ghost">Save</button>
+      <button id="btn-pdf" class="btn btn-secondary">Save PDF</button>
+      <button id="btn-share" class="btn btn-primary">Share&nbsp;/&nbsp;Email</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="vendor/jspdf.umd.min.js"></script>
+  <script src="vendor/jspdf.plugin.autotable.min.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/signature.js"></script>
+  <script src="js/forms/registry.js"></script>
+  <script src="js/forms/inspection-report.js"></script>
+  <script src="js/pdf.js"></script>
+  <script src="js/share.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
