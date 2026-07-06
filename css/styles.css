@@ -189,7 +189,15 @@ h1, h2, h3 { margin: 0; }
   background: #fbfcfd;
 }
 .m-table input.reading { min-width: 58px; text-align: center; }
-.m-table input.out-tol { background: var(--danger-soft); border-color: var(--danger); color: var(--danger); font-weight: 700; }
+.m-table .out-tol { background: var(--danger-soft) !important; border-color: var(--danger) !important; color: var(--danger); font-weight: 700; }
+.m-table td.tap-cell { text-align: center; white-space: nowrap; }
+.m-table .tap-check { width: 22px; height: 22px; accent-color: var(--accent); vertical-align: middle; }
+.m-table select.tap-result {
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 4px; margin-left: 6px; min-width: 86px;
+  background: #fbfcfd; vertical-align: middle;
+}
+.m-table select.tap-result.bad { background: var(--danger-soft); border-color: var(--danger); color: var(--danger); font-weight: 700; }
 .m-table .row-del {
   border: none; background: none; color: var(--muted);
   font-size: 17px; width: 34px; height: 38px; border-radius: 8px;

@@ -71,7 +71,7 @@
     return data;
   }
 
-  const blankRow = sec => ({ parameter: '', spec: '', tol: '', instrument: '', r: Array(sec.maxReadings || 10).fill('') });
+  const blankRow = sec => ({ parameter: '', spec: '', tol: '', instrument: '', tapped: false, tapResult: '', r: Array(sec.maxReadings || 10).fill('') });
 
   async function renderReportList() {
     const listEl = $('#report-list');
@@ -124,7 +124,10 @@
     const copy = JSON.parse(JSON.stringify(data));
     schema.sections.forEach(sec => {
       if (sec.type === 'measurements' && copy[sec.key]) {
-        copy[sec.key].rows.forEach(row => { row.r = row.r.map(() => ''); });
+        copy[sec.key].rows.forEach(row => {
+          row.r = row.r.map(() => '');
+          row.tapResult = '';
+        });
       }
       if (sec.type === 'signature') delete copy[sec.key];
       if (sec.type === 'checks') copy[sec.key] = {};
@@ -250,7 +253,7 @@
       table.innerHTML = '';
       const thead = el('thead');
       const hr = el('tr');
-      ['#', 'Parameter', 'Specification', 'Tolerance ±', 'Instrument'].forEach(h => hr.append(el('th', null, h)));
+      ['#', 'Parameter', 'Specification', 'Tolerance ±', 'Instrument', 'Tapped hole'].forEach(h => hr.append(el('th', null, h)));
       for (let i = 1; i <= m.readings; i++) hr.append(el('th', null, String(i)));
       hr.append(el('th', null, ''));
       thead.append(hr);
@@ -276,6 +279,40 @@
           return td;
         };
         tr.append(mkCell('parameter'), mkCell('spec', null, '92px'), mkCell('tol', null, '84px'), mkCell('instrument', null, '104px'));
+
+        /* Hole rows keep normal position readings; the tapping itself gets
+         * a single OK / Not OK / N/A that only appears when the box is ticked. */
+        const tdTap = el('td', 'tap-cell');
+        const tap = el('input');
+        tap.type = 'checkbox';
+        tap.className = 'tap-check';
+        tap.title = 'Tapped hole — adds a single OK / Not OK for the tapping';
+        tap.checked = !!row.tapped;
+        tap.addEventListener('change', () => {
+          row.tapped = tap.checked;
+          if (!tap.checked) row.tapResult = '';
+          markDirty();
+          buildTable();
+        });
+        tdTap.append(tap);
+        if (row.tapped) {
+          const sel = el('select', 'tap-result');
+          ['', 'OK', 'Not OK', 'N/A'].forEach(o => {
+            const opt = el('option', null, o || 'Tapping…');
+            opt.value = o;
+            sel.append(opt);
+          });
+          sel.value = row.tapResult || '';
+          const paint = () => sel.classList.toggle('bad', sel.value === 'Not OK');
+          sel.addEventListener('change', () => {
+            row.tapResult = sel.value;
+            markDirty();
+            paint();
+          });
+          paint();
+          tdTap.append(sel);
+        }
+        tr.append(tdTap);
 
         for (let i = 0; i < m.readings; i++) {
           const td = el('td');
@@ -310,7 +347,7 @@
     }
 
     function refreshRowTol(tr, row, n) {
-      const inputs = tr.querySelectorAll('input.reading');
+      const inputs = tr.querySelectorAll('.reading');
       inputs.forEach(inp => applyTolClass(inp, row));
     }
 
@@ -328,7 +365,6 @@
     if (isNaN(s) || t === null || isNaN(r) || String(reading).trim() === '') return false;
     return Math.abs(r - s) > t + 1e-9;
   };
-
   function applyTolClass(inp, row) {
     inp.classList.toggle('out-tol', SCI.isOutOfTol(row.spec, row.tol, inp.value));
   }

@@ -119,11 +119,16 @@ SCI.pdf = (() => {
     y = sectionTitle(doc, sec.title || 'Measurements', y);
 
     const n = m.readings;
+    const hasTap = rows.some(r => r.tapped);
     const head = [['#', 'Parameter', 'Specification', 'Tolerance', 'Instrument',
-      ...Array.from({ length: n }, (_, i) => 'R' + (i + 1))]];
+      ...Array.from({ length: n }, (_, i) => 'R' + (i + 1)),
+      ...(hasTap ? ['Tapping'] : [])]];
     const body = rows.map((r, i) => [
-      i + 1, r.parameter, r.spec, r.tol ? (String(r.tol).includes('±') ? r.tol : '± ' + r.tol) : '',
-      r.instrument, ...r.r.slice(0, n).map(v => v === undefined ? '' : String(v)),
+      i + 1, r.parameter, r.spec,
+      r.tol ? (String(r.tol).includes('±') ? r.tol : '± ' + r.tol) : '',
+      r.instrument,
+      ...r.r.slice(0, n).map(v => v === undefined ? '' : String(v)),
+      ...(hasTap ? [r.tapped ? (r.tapResult || '—') : ''] : []),
     ]);
 
     doc.autoTable({
@@ -141,14 +146,26 @@ SCI.pdf = (() => {
         4: { cellWidth: 26 },
       },
       didParseCell(hook) {
-        if (hook.section === 'body' && hook.column.index >= 5) {
-          hook.cell.styles.halign = 'center';
-          const row = rows[hook.row.index];
+        if (hook.section !== 'body' || hook.column.index < 5) return;
+        hook.cell.styles.halign = 'center';
+        const row = rows[hook.row.index];
+        if (hook.column.index < 5 + n) {
           const reading = row.r[hook.column.index - 5];
           if (SCI.isOutOfTol(row.spec, row.tol, reading)) {
             hook.cell.styles.textColor = RED;
             hook.cell.styles.fontStyle = 'bold';
             hook.cell.styles.fillColor = [253, 236, 234];
+          }
+        } else if (row.tapped) { /* Tapping column */
+          const v = row.tapResult;
+          hook.cell.styles.fontStyle = 'bold';
+          if (v === 'Not OK') {
+            hook.cell.styles.textColor = RED;
+            hook.cell.styles.fillColor = [253, 236, 234];
+          } else if (v === 'OK') {
+            hook.cell.styles.textColor = [30, 125, 67];
+          } else {
+            hook.cell.styles.textColor = GREY;
           }
         }
       },

@@ -15,6 +15,7 @@ SCI.registerForm({
         { key: 'partNo', label: 'Part No.', input: 'text' },
         { key: 'qty', label: 'Qty', input: 'number' },
         { key: 'poNo', label: 'P.O. No.', input: 'text' },
+        { key: 'woNo', label: 'WO No.', input: 'text' },
         { key: 'grnNo', label: 'GRN No.', input: 'text' },
         { key: 'date', label: 'Date', input: 'date', default: 'today' },
       ],
@@ -82,6 +83,7 @@ SCI.registerForm({
     if (data.partDescription) l.push(`Part: ${data.partDescription}${data.partNo ? ' (Part No. ' + data.partNo + ')' : ''}`);
     if (data.qty) l.push(`Qty: ${data.qty}`);
     if (data.poNo) l.push(`P.O. No.: ${data.poNo}`);
+    if (data.woNo) l.push(`WO No.: ${data.woNo}`);
     if (data.grnNo) l.push(`GRN No.: ${data.grnNo}`);
     if (data.result) l.push(`Inspection result: ${data.result}`);
     if (data.date) l.push(`Inspection date: ${data.date}`);
