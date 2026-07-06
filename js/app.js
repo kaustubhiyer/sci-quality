@@ -1,4 +1,4 @@
-/* App shell: home screen, schema-driven form renderer, autosave. */
+/* App shell: tab navigation, schema-driven form renderer, piece sync. */
 (() => {
   const $ = sel => document.querySelector(sel);
   const el = (tag, cls, text) => {
@@ -8,25 +8,76 @@
     return n;
   };
 
-  const viewHome = $('#view-home');
-  const viewForm = $('#view-form');
-
-  let current = null;        // { report, schema, dirty }
-  let saveTimer = null;
-  let sigPad = null;
+  window.SCI = window.SCI || {};
+  SCI.ui = { el };
 
   /* ---------- toast ---------- */
   let toastTimer = null;
-  function toast(msg, ms = 2600) {
+  SCI.toast = (msg, ms = 2600) => {
     const t = $('#toast');
     t.textContent = msg;
     t.hidden = false;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { t.hidden = true; }, ms);
-  }
-  SCI.toast = toast;
+  };
 
-  /* ---------- home ---------- */
+  /* ---------- modal ---------- */
+  SCI.ui.modal = ({ title, body, actions }) => {
+    const root = $('#modal-root');
+    const overlay = el('div', 'modal-overlay');
+    const box = el('div', 'modal-box');
+    const head = el('div', 'modal-head');
+    head.append(el('h3', null, title));
+    const closeBtn = el('button', 'icon-btn', '✕');
+    head.append(closeBtn);
+    box.append(head);
+    const bodyWrap = el('div', 'modal-body');
+    bodyWrap.append(body);
+    box.append(bodyWrap);
+    const foot = el('div', 'modal-foot');
+    (actions || []).forEach(a => {
+      const b = el('button', 'btn ' + (a.cls || 'btn-ghost'), a.label);
+      b.addEventListener('click', async () => {
+        await a.onClick();
+        if (!a.keepOpen) close();
+      });
+      foot.append(b);
+    });
+    if (actions && actions.length) box.append(foot);
+    overlay.append(box);
+    root.append(overlay);
+    const close = () => overlay.remove();
+    closeBtn.addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    return { close };
+  };
+
+  /* ---------- tab navigation ---------- */
+  const TABS = ['inspect', 'parts', 'dispatch', 'stats', 'settings'];
+  let currentTab = 'inspect';
+
+  async function showTab(tab) {
+    currentTab = tab;
+    $('#view-form').hidden = true;
+    TABS.forEach(t => {
+      $('#tab-' + t).hidden = t !== tab;
+      $('#nav-' + t).classList.toggle('on', t === tab);
+    });
+    $('#tab-bar').hidden = false;
+    if (tab === 'inspect') { renderFormCards(); renderReportList(); }
+    if (tab === 'parts') SCI.views.renderParts($('#tab-parts'));
+    if (tab === 'dispatch') SCI.views.renderDispatch($('#tab-dispatch'));
+    if (tab === 'stats') SCI.views.renderStats($('#tab-stats'));
+    if (tab === 'settings') SCI.views.renderSettings($('#tab-settings'));
+  }
+
+  TABS.forEach(t => $('#nav-' + t).addEventListener('click', () => showTab(t)));
+
+  /* ---------- inspect tab (home) ---------- */
+  let current = null;
+  let saveTimer = null;
+  let sigPad = null;
+
   function renderFormCards() {
     const wrap = $('#form-cards');
     wrap.innerHTML = '';
@@ -43,7 +94,7 @@
 
   function newReport(schema, data) {
     return {
-      id: SCI.db.newId(),
+      id: SCI.db.newId('r'),
       formId: schema.id,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -102,12 +153,12 @@
         const copy = newReport(schema, duplicateData(schema, report.data));
         await SCI.db.save(copy);
         openForm(copy);
-        toast('Duplicated — readings cleared');
+        SCI.toast('Duplicated — readings cleared');
       });
       const btnDel = el('button', 'icon-btn', '🗑');
       btnDel.title = 'Delete';
       btnDel.addEventListener('click', async () => {
-        if (!confirm('Delete this report? This cannot be undone.')) return;
+        if (!confirm('Delete this report? Piece records created from it are kept.')) return;
         await SCI.db.remove(report.id);
         renderReportList();
       });
@@ -119,7 +170,6 @@
     $('#report-empty').hidden = shown > 0;
   }
 
-  /* Duplicate keeps part details & parameters but clears readings, result, signature. */
   function duplicateData(schema, data) {
     const copy = JSON.parse(JSON.stringify(data));
     schema.sections.forEach(sec => {
@@ -133,6 +183,7 @@
       if (sec.type === 'checks') copy[sec.key] = {};
     });
     delete copy.result;
+    delete copy.pieceResults; // new batch gets fresh serials
     copy.date = new Date().toISOString().slice(0, 10);
     return copy;
   }
@@ -140,7 +191,7 @@
   /* ---------- form rendering ---------- */
   async function openForm(report) {
     const schema = SCI.forms[report.formId];
-    const existing = await SCI.db.get(report.id);
+    const existing = await SCI.db.getReport(report.id);
     current = { report, schema, touched: !!existing };
     $('#form-title').textContent = schema.title;
     $('#save-status').textContent = '';
@@ -152,16 +203,45 @@
       const card = el('section', 'card');
       if (sec.type === 'fields') renderFields(card, sec);
       else if (sec.type === 'measurements') renderMeasurements(card, sec);
+      else if (sec.type === 'pieceResults') renderPieceResults(card, sec);
       else if (sec.type === 'checks') renderChecks(card, sec);
       else if (sec.type === 'textarea') renderTextarea(card, sec);
       else if (sec.type === 'signature') renderSignature(card, sec);
       main.append(card);
     });
 
-    viewHome.hidden = true;
-    viewForm.hidden = false;
+    TABS.forEach(t => $('#tab-' + t).hidden = true);
+    $('#tab-bar').hidden = true;
+    $('#view-form').hidden = false;
     window.scrollTo(0, 0);
   }
+
+  SCI.app = {
+    openForm,
+    async openReportById(id) {
+      const rep = await SCI.db.getReport(id);
+      if (rep) openForm(rep);
+      else SCI.toast('Report no longer exists');
+    },
+    /* Re-inspection of a single reworked piece: prefilled report, qty 1,
+     * serial pinned to the piece. */
+    async reinspectPiece(piece) {
+      const lastId = piece.reportIds[piece.reportIds.length - 1];
+      const last = lastId ? await SCI.db.getReport(lastId) : null;
+      const schema = SCI.forms[last ? last.formId : 'inspection-report'];
+      const data = last ? duplicateData(schema, last.data) : defaultData(schema);
+      data.woNo = piece.woNo;
+      data.partNo = piece.partNo;
+      data.partDescription = piece.partDescription;
+      data.customer = piece.customer;
+      data.qty = '1';
+      data.pieceResults = { start: piece.serial, results: [null] };
+      const rep = newReport(schema, data);
+      await SCI.db.save(rep);
+      openForm(rep);
+      SCI.toast('Re-inspection for S/N ' + piece.serial + ' — record the piece result below');
+    },
+  };
 
   function markDirty() {
     if (current) current.touched = true;
@@ -175,8 +255,9 @@
     clearTimeout(saveTimer);
     current.touched = true;
     await SCI.db.save(current.report);
+    const n = await SCI.parts.syncFromReport(current.report);
     $('#save-status').textContent = 'Saved ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    if (showToast) toast('Report saved on this device');
+    if (showToast) SCI.toast(n ? `Saved — ${n} piece record(s) updated` : 'Report saved on this device');
   }
 
   function renderFields(card, sec) {
@@ -214,9 +295,7 @@
   function renderMeasurements(card, sec) {
     const m = current.report.data[sec.key];
 
-    const head = el('h3', null, sec.title || 'Measurements');
-    card.append(head);
-
+    card.append(el('h3', null, sec.title || 'Measurements'));
     const scroll = el('div', 'table-scroll');
     const table = el('table', 'm-table');
     scroll.append(table);
@@ -246,7 +325,7 @@
     });
     ctl.append(selN);
 
-    tools.append(btnAdd, ctl, el('span', 'tol-hint', 'Out-of-tolerance readings turn red automatically'));
+    tools.append(btnAdd, ctl, el('span', 'tol-hint', 'Reading column i = piece with serial (start + i − 1). Out-of-tolerance turns red.'));
     card.append(tools);
 
     function buildTable() {
@@ -273,15 +352,13 @@
           inp.addEventListener('input', () => {
             row[key] = inp.value;
             markDirty();
-            if (key === 'spec' || key === 'tol') refreshRowTol(tr, row, m.readings);
+            if (key === 'spec' || key === 'tol') refreshRowTol(tr, row);
           });
           td.append(inp);
           return td;
         };
         tr.append(mkCell('parameter'), mkCell('spec', null, '92px'), mkCell('tol', null, '84px'), mkCell('instrument', null, '104px'));
 
-        /* Hole rows keep normal position readings; the tapping itself gets
-         * a single OK / Not OK / N/A that only appears when the box is ticked. */
         const tdTap = el('td', 'tap-cell');
         const tap = el('input');
         tap.type = 'checkbox';
@@ -341,20 +418,18 @@
         tr.append(tdDel);
 
         tbody.append(tr);
-        refreshRowTol(tr, row, m.readings);
+        refreshRowTol(tr, row);
       });
       table.append(tbody);
     }
 
-    function refreshRowTol(tr, row, n) {
-      const inputs = tr.querySelectorAll('.reading');
-      inputs.forEach(inp => applyTolClass(inp, row));
+    function refreshRowTol(tr, row) {
+      tr.querySelectorAll('input.reading').forEach(inp => applyTolClass(inp, row));
     }
 
     buildTable();
   }
 
-  /* "±0.5", "0.5", "+0.5" → 0.5; anything unparseable → null (no highlighting) */
   SCI.parseTol = t => {
     if (t === undefined || t === null) return null;
     const v = parseFloat(String(t).replace(/[±+\s]/g, ''));
@@ -365,9 +440,102 @@
     if (isNaN(s) || t === null || isNaN(r) || String(reading).trim() === '') return false;
     return Math.abs(r - s) > t + 1e-9;
   };
+
   function applyTolClass(inp, row) {
     inp.classList.toggle('out-tol', SCI.isOutOfTol(row.spec, row.tol, inp.value));
   }
+
+  /* --- piece results: one verdict per physical piece --- */
+  function renderPieceResults(card, sec) {
+    const d = current.report.data;
+    card.append(el('h3', null, sec.title || 'Piece Results'));
+    const wrap = el('div');
+    card.append(wrap);
+
+    const build = async () => {
+      wrap.innerHTML = '';
+      const qty = Math.min(parseInt(d.qty, 10) || 0, 10);
+      if (!d.woNo || !d.partNo || !qty) {
+        wrap.append(el('p', 'tol-hint', 'Fill WO No., Part No. and Qty (max 10 per report) above to record per-piece results.'));
+        return;
+      }
+      if (!d.pieceResults) {
+        const start = (await SCI.parts.maxSerial(d.woNo, d.partNo)) + 1;
+        d.pieceResults = { start, results: Array(qty).fill(null) };
+      }
+      const pr = d.pieceResults;
+      while (pr.results.length < qty) pr.results.push(null);
+      pr.results.length = qty;
+
+      const startRow = el('div', 'readings-ctl');
+      startRow.append(el('span', null, 'Serial numbers start at:'));
+      const startIn = el('input', 'serial-start');
+      startIn.inputMode = 'numeric';
+      startIn.value = pr.start;
+      startIn.addEventListener('input', () => {
+        pr.start = parseInt(startIn.value, 10) || 1;
+        markDirty();
+        drawRows();
+      });
+      startRow.append(startIn);
+      const suggest = el('button', 'btn-add', 'Suggest from readings');
+      suggest.title = 'Marks piece i OK unless any reading in column i is out of tolerance';
+      suggest.addEventListener('click', () => {
+        const m = d.measurements;
+        for (let i = 0; i < qty; i++) {
+          let bad = false;
+          (m ? m.rows : []).forEach(row => {
+            if (SCI.isOutOfTol(row.spec, row.tol, row.r[i])) bad = true;
+            if (row.tapped && row.tapResult === 'Not OK') bad = true;
+          });
+          if (!pr.results[i]) pr.results[i] = bad ? null : 'ok';
+        }
+        markDirty();
+        drawRows();
+        SCI.toast('Pieces without out-of-tol readings marked OK — pick a bucket for the rest');
+      });
+      startRow.append(suggest);
+      wrap.append(startRow);
+
+      const rows = el('div', 'piece-rows');
+      wrap.append(rows);
+
+      function drawRows() {
+        rows.innerHTML = '';
+        for (let i = 0; i < qty; i++) {
+          const row = el('div', 'piece-row');
+          row.append(el('span', 'piece-sn', 'S/N ' + (pr.start + i)));
+          const seg = el('div', 'seg');
+          SCI.parts.INTERNAL_RESULTS.forEach(opt => {
+            const b = el('button', null, opt.label);
+            b.type = 'button';
+            const cls = opt.key === 'ok' ? 'sel-ok' : opt.key === 'rejected' ? 'sel-bad' : 'sel-na';
+            const sync = () => b.className = pr.results[i] === opt.key ? cls : '';
+            b.addEventListener('click', () => {
+              pr.results[i] = pr.results[i] === opt.key ? null : opt.key;
+              seg.querySelectorAll('button').forEach(x => x.className = '');
+              sync();
+              markDirty();
+            });
+            sync();
+            seg.append(b);
+          });
+          row.append(seg);
+          rows.append(row);
+        }
+      }
+      drawRows();
+      wrap.append(el('p', 'tol-hint', 'OK pieces go to “Awaiting TPI”. Others go to the chosen bucket. Manage them in the Parts tab.'));
+    };
+
+    build();
+    current._prBuild = build; // rebuilt when WO/Part/Qty change (delegated below)
+  }
+
+  /* single delegated listener: refresh piece results when detail fields change */
+  $('#form-sections').addEventListener('input', e => {
+    if (current && current._prBuild && e.target.closest('.fields-grid')) current._prBuild();
+  });
 
   /* --- checks --- */
   function renderChecks(card, sec) {
@@ -432,9 +600,7 @@
   $('#btn-back').addEventListener('click', async () => {
     await saveCurrent();
     current = null;
-    viewForm.hidden = true;
-    viewHome.hidden = false;
-    renderReportList();
+    showTab(currentTab === 'inspect' ? 'inspect' : currentTab);
   });
 
   $('#btn-save').addEventListener('click', () => saveCurrent(true));
@@ -444,10 +610,10 @@
     await saveCurrent();
     try {
       SCI.pdf.download(current.schema, current.report.data);
-      toast('PDF saved to your Downloads / Files');
+      SCI.toast('PDF saved to your Downloads / Files');
     } catch (e) {
       console.error(e);
-      toast('Could not generate PDF: ' + e.message);
+      SCI.toast('Could not generate PDF: ' + e.message);
     }
   });
 
@@ -460,8 +626,9 @@
   $('#report-search').addEventListener('input', renderReportList);
 
   /* ---------- boot ---------- */
-  renderFormCards();
-  renderReportList();
+  showTab('inspect');
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+  SCI.backup.nagIfStale();
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});

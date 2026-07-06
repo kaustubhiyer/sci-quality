@@ -1,20 +1,31 @@
-/* IndexedDB persistence — all data stays on this device. */
+/* IndexedDB persistence — all data stays on this device.
+ * Stores: reports (inspection reports), pieces (individual parts by
+ * WO+PartNo+Serial), dispatches (dispatch groups), kv (settings). */
 window.SCI = window.SCI || {};
 
 SCI.db = (() => {
   const DB_NAME = 'sci-quality';
-  const STORE = 'reports';
   let dbPromise = null;
 
   function open() {
     if (dbPromise) return dbPromise;
     dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, 1);
+      const req = indexedDB.open(DB_NAME, 2);
       req.onupgradeneeded = () => {
         const db = req.result;
-        if (!db.objectStoreNames.contains(STORE)) {
-          const store = db.createObjectStore(STORE, { keyPath: 'id' });
-          store.createIndex('updatedAt', 'updatedAt');
+        if (!db.objectStoreNames.contains('reports')) {
+          const s = db.createObjectStore('reports', { keyPath: 'id' });
+          s.createIndex('updatedAt', 'updatedAt');
+        }
+        if (!db.objectStoreNames.contains('pieces')) {
+          const s = db.createObjectStore('pieces', { keyPath: 'id' });
+          s.createIndex('status', 'status');
+        }
+        if (!db.objectStoreNames.contains('dispatches')) {
+          db.createObjectStore('dispatches', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('kv')) {
+          db.createObjectStore('kv', { keyPath: 'k' });
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -23,43 +34,40 @@ SCI.db = (() => {
     return dbPromise;
   }
 
-  function tx(mode, fn) {
+  function req(store, mode, fn) {
     return open().then(db => new Promise((resolve, reject) => {
-      const t = db.transaction(STORE, mode);
-      const store = t.objectStore(STORE);
-      const out = fn(store);
-      t.oncomplete = () => resolve(out && out.result !== undefined ? out.result : out);
-      t.onerror = () => reject(t.error);
+      const r = fn(db.transaction(store, mode).objectStore(store));
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
     }));
   }
 
-  return {
+  const api = {
+    put: (store, obj) => req(store, 'readwrite', s => s.put(obj)),
+    get: (store, id) => req(store, 'readonly', s => s.get(id)).then(r => r || null),
+    all: store => req(store, 'readonly', s => s.getAll()).then(r => r || []),
+    del: (store, id) => req(store, 'readwrite', s => s.delete(id)),
+    clear: store => req(store, 'readwrite', s => s.clear()),
+
+    kvGet: k => api.get('kv', k).then(r => (r ? r.v : null)),
+    kvSet: (k, v) => api.put('kv', { k, v }),
+
+    /* ---- reports (kept API-compatible with v1) ---- */
     async save(report) {
       report.updatedAt = Date.now();
-      await tx('readwrite', s => s.put(report));
+      await api.put('reports', report);
       return report;
     },
-    async get(id) {
-      const db = await open();
-      return new Promise((resolve, reject) => {
-        const req = db.transaction(STORE).objectStore(STORE).get(id);
-        req.onsuccess = () => resolve(req.result || null);
-        req.onerror = () => reject(req.error);
-      });
-    },
+    getReport: id => api.get('reports', id),
     async list() {
-      const db = await open();
-      return new Promise((resolve, reject) => {
-        const req = db.transaction(STORE).objectStore(STORE).index('updatedAt').getAll();
-        req.onsuccess = () => resolve((req.result || []).reverse());
-        req.onerror = () => reject(req.error);
-      });
+      const all = await api.all('reports');
+      return all.sort((a, b) => b.updatedAt - a.updatedAt);
     },
-    async remove(id) {
-      await tx('readwrite', s => s.delete(id));
+    remove: id => api.del('reports', id),
+
+    newId(prefix) {
+      return (prefix || 'r') + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
     },
-    newId() {
-      return 'r_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
-    }
   };
+  return api;
 })();

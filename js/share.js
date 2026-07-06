@@ -2,6 +2,35 @@
  * Falls back to a plain download when the Web Share API is unavailable. */
 window.SCI = window.SCI || {};
 
+/* Share arbitrary files (PDFs, photos) with prefilled text via the Android
+ * share sheet; falls back to downloading the files + mailto. */
+SCI.shareFiles = async function (files, title, text) {
+  if (navigator.canShare && navigator.canShare({ files })) {
+    try {
+      await navigator.share({ files, title, text });
+      return true;
+    } catch (e) {
+      if (e.name === 'AbortError') return false;
+      console.warn('Share failed, falling back to download', e);
+    }
+  }
+  for (const f of files) {
+    const url = URL.createObjectURL(f);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = f.name;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+  SCI.toast('Sharing not supported here — files downloaded. Attach them to the email that opens.', 5000);
+  setTimeout(() => {
+    location.href = 'mailto:?subject=' + encodeURIComponent(title) + '&body=' + encodeURIComponent(text);
+  }, 800);
+  return true;
+};
+
 SCI.share = async function (schema, data) {
   const fileName = (schema.fileName(data) || 'report') + '.pdf';
   const blob = SCI.pdf.getBlob(schema, data);

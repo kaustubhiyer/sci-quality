@@ -29,6 +29,11 @@ SCI.registerForm({
       defaultReadings: 5,
     },
     {
+      type: 'pieceResults',
+      key: 'pieceResults',
+      title: 'Piece Results',
+    },
+    {
       type: 'checks',
       key: 'checks',
       title: 'Condition Checks',

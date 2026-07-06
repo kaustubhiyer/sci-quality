@@ -9,15 +9,37 @@ served from GitHub Pages.
 
 - **Inspection Report** form matching the SCI quality template: part details,
   a measurements table (parameter / specification / tolerance / instrument /
-  up to 10 readings), condition checks, remarks, result, and a finger-drawn
-  signature.
-- Out-of-tolerance readings highlight red automatically (in the app and in the PDF).
-- Generates a branded **A4 landscape PDF** — save to Files or print.
-- **Share / Email** opens the Android share sheet with the PDF attached and a
-  pre-written email body — pick Gmail and send.
-- Saved reports list with search, and **duplicate** (same part & parameters,
-  fresh readings) for repeat inspections.
-- Installable to the home screen (PWA) and works fully offline after first load.
+  up to 10 readings, tapped-hole rows), condition checks, remarks, result, and
+  a finger-drawn signature. Out-of-tolerance readings highlight red (app + PDF).
+- **Per-piece tracking**: every physical piece is WO No. + Part No. + Serial.
+  Reading column *i* corresponds to piece *start + i − 1*; each piece gets its
+  own OK / Deviation / Challan / Rework / Rejected verdict.
+- **Full lifecycle** (Parts tab): internal OK → Awaiting TPI → TPI approval
+  (email OTP or PIN) → Ready → Dispatch → Dispatched. Not-OK pieces go to
+  Deviation (photos + email request), Delivery Challan (client approve →
+  skips TPI / reject → rework), Rework (re-inspect, same serial), or
+  Rejected (scrapped, record kept). Every move is history-logged.
+- **Dispatch groups**: create one per delivery day, add approved parts, and
+  generate a single email with ALL inspection report PDFs attached.
+- **Stats dashboard**: totals, accepted/rejected pie, deviation & challan &
+  scrapped lists, internal and TPI acceptance rates.
+- **Settings** (admin-PIN protected): manage TPIs and their emails, email-OTP
+  endpoint, backup/restore.
+- Branded **A4 landscape PDFs**, Android share-sheet emailing, installable
+  PWA, fully offline after first load. All data stays on the device.
+
+## TPI email OTP setup (one time, ~5 min)
+
+TPI approval codes are emailed from **your own Gmail** via a Google Apps
+Script — see [docs/otp-apps-script.gs](docs/otp-apps-script.gs) for the code
+and step-by-step instructions, then paste the deployed URL + secret into
+Settings. Until then, TPIs can use a fallback PIN set in Settings.
+
+## Backups
+
+Everything lives in the tablet's browser storage. Use **Settings → Back up
+now** weekly (share the file to Google Drive or email) — the app reminds you
+when a backup is overdue. Restore replaces all data from a backup file.
 
 ## Install on the tablet (one time)
 
