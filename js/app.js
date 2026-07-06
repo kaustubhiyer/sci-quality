@@ -605,6 +605,60 @@
 
   $('#btn-save').addEventListener('click', () => saveCurrent(true));
 
+  /* Copy part details + parameter table from another report into this one.
+   * Readings, piece results, signature and order fields (WO/P.O./GRN/date)
+   * are NOT copied. */
+  $('#btn-copy-from').addEventListener('click', async () => {
+    if (!current) return;
+    const reports = (await SCI.db.list()).filter(r => r.id !== current.report.id);
+    if (!reports.length) { SCI.toast('No other reports to copy from'); return; }
+
+    const body = el('div');
+    const search = el('input', 'modal-input');
+    search.type = 'search';
+    search.placeholder = 'Search reports…';
+    const list = el('div', 'pd-list');
+    body.append(search, list);
+    let close;
+
+    const draw = () => {
+      list.innerHTML = '';
+      const q = search.value.toLowerCase();
+      reports.forEach(rep => {
+        const schema = SCI.forms[rep.formId];
+        if (!schema) return;
+        const s = schema.summary(rep.data);
+        if (q && !(s.title + ' ' + s.subtitle).toLowerCase().includes(q)) return;
+        const row = el('button', 'pd-piece-row copy-row');
+        row.append(el('span', null, s.title + (s.subtitle ? ' — ' + s.subtitle : '')));
+        row.addEventListener('click', () => {
+          const d = current.report.data, src = rep.data;
+          ['customer', 'partDescription', 'partNo', 'qty'].forEach(k => {
+            if (src[k] !== undefined && src[k] !== '') d[k] = src[k];
+          });
+          if (src.measurements) {
+            d.measurements = JSON.parse(JSON.stringify(src.measurements));
+            d.measurements.rows.forEach(r => {
+              r.r = r.r.map(() => '');
+              r.tapResult = '';
+            });
+          }
+          if (src.remarks) d.remarks = src.remarks;
+          delete d.pieceResults; // serials re-derived for the (possibly new) part
+          current.touched = true;
+          close();
+          openForm(current.report);
+          SCI.toast('Fields copied — readings cleared. WO / P.O. / GRN not touched.', 4000);
+        });
+        list.append(row);
+      });
+      if (!list.children.length) list.append(el('p', 'modal-hint', 'No reports match.'));
+    };
+    search.addEventListener('input', draw);
+    draw();
+    ({ close } = SCI.ui.modal({ title: 'Copy fields from…', body, actions: [] }));
+  });
+
   $('#btn-pdf').addEventListener('click', async () => {
     if (!current) return;
     await saveCurrent();

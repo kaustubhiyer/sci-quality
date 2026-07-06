@@ -137,6 +137,12 @@ h1, h2, h3 { margin: 0; }
   box-shadow: 0 2px 8px rgba(0,0,0,0.18);
 }
 .form-topbar .icon-btn { background: rgba(255,255,255,0.12); border: none; color: #fff; }
+.form-topbar .topbar-right {
+  margin-left: auto; width: auto; padding: 0 14px;
+  font-size: 13px; font-weight: 600; white-space: nowrap;
+}
+.copy-row { width: 100%; text-align: left; background: none; border: none; border-bottom: 1px solid var(--line); cursor: pointer; }
+.copy-row:active { background: var(--bg); }
 .form-topbar-title h1 { font-size: 17.5px; font-weight: 700; }
 .save-status { font-size: 12px; opacity: 0.75; }
 

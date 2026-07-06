@@ -513,6 +513,12 @@ SCI.views = (() => {
   }
 
   /* ================= STATS TAB ================= */
+  const STATUS_COLORS = {
+    awaiting_tpi: '#33598a', ready: '#1e7d43', in_dispatch: '#0e7490',
+    dispatched: '#64748b', deviation: '#e8890c', challan: '#a16207',
+    rework: '#8d6e63', rejected: '#c0392b',
+  };
+
   async function renderStats(root) {
     root.innerHTML = '';
     const s = await P().stats();
@@ -531,18 +537,55 @@ SCI.views = (() => {
     card(s.tpiRate === null ? '—' : s.tpiRate + '%', 'TPI acceptance');
     root.append(cards);
 
-    if (s.total) {
-      const pieCard = el('div', 'card');
-      pieCard.append(el('h3', null, 'Accepted vs Rejected'));
+    if (!s.total) {
+      root.append(el('p', 'empty-note', 'Charts appear once pieces are recorded.'));
+      return;
+    }
+
+    const chartCard = (title, w, h, draw) => {
+      const c = el('div', 'card');
+      c.append(el('h3', null, title));
       const cv = el('canvas', 'pie-canvas');
-      cv.width = 480; cv.height = 240;
-      pieCard.append(cv);
-      drawPie(cv, [
-        ['Accepted', s.accepted, '#1e7d43'],
-        ['Rejected', s.rejected, '#c0392b'],
-        ['In process', s.inProcess, '#e8890c'],
-      ]);
-      root.append(pieCard);
+      cv.width = w; cv.height = h;
+      c.append(cv);
+      draw(cv);
+      root.append(c);
+    };
+
+    chartCard('Accepted vs Rejected', 520, 250, cv => drawPie(cv, [
+      ['Accepted', s.accepted, '#1e7d43'],
+      ['Rejected', s.rejected, '#c0392b'],
+      ['In process', s.inProcess, '#e8890c'],
+    ], 0));
+
+    chartCard('Where parts are right now', 520, 250, cv => drawPie(cv,
+      Object.values(P().ST)
+        .map(st => [P().LABELS[st], s.byS[st].length, STATUS_COLORS[st]])
+        .filter(([, v]) => v > 0), 52));
+
+    chartCard('Inspections by month', 560, 260, cv => drawMonthly(cv, s.pieces));
+
+    chartCard('Acceptance rates', 560, 150, cv => drawHBars(cv, [
+      ['Internal', s.internalRate],
+      ['TPI', s.tpiRate],
+    ]));
+
+    /* problem parts: part numbers with the most not-OK decisions */
+    const problems = {};
+    s.pieces.forEach(p => p.history.forEach(h => {
+      if ((h.by === 'internal' || h.by === 'tpi') &&
+          ['deviation', 'challan', 'rework', 'rejected'].includes(h.to)) {
+        problems[p.partNo] = problems[p.partNo] || { n: 0, desc: p.partDescription };
+        problems[p.partNo].n++;
+      }
+    }));
+    const probRows = Object.entries(problems).sort((a, b) => b[1].n - a[1].n).slice(0, 8);
+    if (probRows.length) {
+      const c = el('div', 'card');
+      c.append(el('h3', null, 'Most rejected part numbers'));
+      probRows.forEach(([pn, { n, desc }]) =>
+        c.append(el('div', 'pd-line', `${pn}${desc ? ' — ' + desc : ''}: ${n} not-OK decision(s)`)));
+      root.append(c);
     }
 
     const listCard = (title, arr) => {
@@ -557,10 +600,10 @@ SCI.views = (() => {
     listCard('Scrapped / rejected parts', s.byS.rejected);
   }
 
-  function drawPie(cv, slices) {
+  function drawPie(cv, slices, innerR) {
     const ctx = cv.getContext('2d');
     const total = slices.reduce((a, [, v]) => a + v, 0) || 1;
-    const cx = 120, cy = 120, r = 95;
+    const cx = 125, cy = cv.height / 2, r = Math.min(100, cv.height / 2 - 20);
     let a0 = -Math.PI / 2;
     slices.forEach(([, v, color]) => {
       if (!v) return;
@@ -571,16 +614,109 @@ SCI.views = (() => {
       ctx.closePath();
       ctx.fillStyle = color;
       ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
       a0 = a1;
     });
-    ctx.font = '15px sans-serif';
-    let ly = 60;
+    if (innerR) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, innerR, 0, 2 * Math.PI);
+      ctx.fillStyle = '#fff';
+      ctx.fill();
+      ctx.fillStyle = '#1d2530';
+      ctx.font = 'bold 22px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(String(total), cx, cy + 8);
+      ctx.textAlign = 'left';
+    }
+    ctx.font = '14px sans-serif';
+    let ly = Math.max(30, cy - slices.length * 12);
     slices.forEach(([lbl, v, color]) => {
       ctx.fillStyle = color;
       ctx.fillRect(255, ly - 11, 13, 13);
       ctx.fillStyle = '#1d2530';
       ctx.fillText(`${lbl}: ${v} (${Math.round(100 * v / total)}%)`, 275, ly);
-      ly += 26;
+      ly += 24;
+    });
+  }
+
+  /* grouped bars: inspected vs accepted per month (last 6 months) */
+  function drawMonthly(cv, pieces) {
+    const ctx = cv.getContext('2d');
+    const months = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push({
+        key: d.getFullYear() + '-' + d.getMonth(),
+        lbl: d.toLocaleDateString('en-IN', { month: 'short' }),
+        inspected: 0, accepted: 0,
+      });
+    }
+    const acceptedSet = ['ready', 'in_dispatch', 'dispatched'];
+    pieces.forEach(p => {
+      const at = p.history.length ? p.history[0].at : p.createdAt;
+      const d = new Date(at);
+      const m = months.find(x => x.key === d.getFullYear() + '-' + d.getMonth());
+      if (!m) return;
+      m.inspected++;
+      if (acceptedSet.includes(p.status)) m.accepted++;
+    });
+
+    const maxV = Math.max(1, ...months.map(m => m.inspected));
+    const x0 = 40, y0 = cv.height - 40, plotH = y0 - 24;
+    const groupW = (cv.width - x0 - 16) / months.length;
+    ctx.font = '13px sans-serif';
+    /* y grid */
+    ctx.strokeStyle = '#e5e9ee';
+    ctx.fillStyle = '#64748b';
+    for (let g = 0; g <= 4; g++) {
+      const v = Math.ceil(maxV * g / 4);
+      const y = y0 - plotH * g / 4;
+      ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(cv.width - 10, y); ctx.stroke();
+      ctx.fillText(String(v), 8, y + 4);
+    }
+    months.forEach((m, i) => {
+      const gx = x0 + i * groupW + groupW * 0.18;
+      const bw = groupW * 0.26;
+      const h1 = plotH * m.inspected / maxV;
+      const h2 = plotH * m.accepted / maxV;
+      ctx.fillStyle = '#1c3d5a';
+      ctx.fillRect(gx, y0 - h1, bw, h1);
+      ctx.fillStyle = '#1e7d43';
+      ctx.fillRect(gx + bw + 4, y0 - h2, bw, h2);
+      ctx.fillStyle = '#64748b';
+      ctx.fillText(m.lbl, gx + bw - 8, y0 + 18);
+    });
+    /* legend */
+    ctx.fillStyle = '#1c3d5a'; ctx.fillRect(x0, 4, 12, 12);
+    ctx.fillStyle = '#1d2530'; ctx.fillText('Inspected', x0 + 18, 15);
+    ctx.fillStyle = '#1e7d43'; ctx.fillRect(x0 + 105, 4, 12, 12);
+    ctx.fillStyle = '#1d2530'; ctx.fillText('Accepted', x0 + 123, 15);
+  }
+
+  /* horizontal % bars */
+  function drawHBars(cv, rows) {
+    const ctx = cv.getContext('2d');
+    ctx.font = '14px sans-serif';
+    let y = 24;
+    rows.forEach(([lbl, pct]) => {
+      ctx.fillStyle = '#1d2530';
+      ctx.fillText(lbl, 10, y + 15);
+      const bx = 90, bw = cv.width - bx - 70, bh = 22;
+      ctx.fillStyle = '#e5e9ee';
+      ctx.fillRect(bx, y, bw, bh);
+      if (pct !== null) {
+        ctx.fillStyle = pct >= 80 ? '#1e7d43' : pct >= 50 ? '#e8890c' : '#c0392b';
+        ctx.fillRect(bx, y, bw * pct / 100, bh);
+        ctx.fillStyle = '#1d2530';
+        ctx.fillText(pct + '%', bx + bw + 10, y + 16);
+      } else {
+        ctx.fillStyle = '#64748b';
+        ctx.fillText('no data yet', bx + bw + 10, y + 16);
+      }
+      y += 44;
     });
   }
 
