@@ -1053,6 +1053,35 @@ SCI.views = (() => {
     });
     pinCard.append(np, chg);
     root.append(pinCard);
+
+    /* ---- danger zone ---- */
+    const dz = el('div', 'card');
+    dz.append(el('h3', null, 'Danger zone'));
+    dz.append(el('p', 'modal-hint', 'Erasing cannot be undone — take a backup first if in doubt.'));
+    const dzRow = el('div', 'dz-actions');
+
+    const wipe = async (stores, msg1, msg2, after) => {
+      if (!confirm(msg1)) return;
+      if (!confirm(msg2)) return;
+      for (const s of stores) await SCI.db.clear(s);
+      SCI.toast(after);
+      setTimeout(() => location.reload(), 900);
+    };
+    const er = btnWithIcon('Erase records (keep settings)', 'trash', 'btn btn-danger');
+    er.addEventListener('click', () => wipe(
+      ['reports', 'pieces', 'dispatches'],
+      'Erase ALL reports, parts and dispatches on this device? Settings, TPIs and the OTP endpoint are kept.',
+      'Really erase all records? This cannot be undone.',
+      'All records erased'));
+    const ea = btnWithIcon('Full reset (everything)', 'trash', 'btn btn-danger');
+    ea.addEventListener('click', () => wipe(
+      ['reports', 'pieces', 'dispatches', 'kv'],
+      'FULL RESET: erases all records AND settings (admin PIN, TPIs, OTP endpoint). Continue?',
+      'Really erase everything? This cannot be undone.',
+      'Device wiped'));
+    dzRow.append(er, ea);
+    dz.append(dzRow);
+    root.append(dz);
   }
 
   function renderCreatePin(root, settings) {
