@@ -130,14 +130,20 @@ SCI.pdf = (() => {
 
     const n = m.readings;
     const hasTap = rows.some(r => r.tapped);
-    const start = data.pieceResults && data.pieceResults.start ? data.pieceResults.start : null;
+    const start = data.pieceResults && data.pieceResults.start ? data.pieceResults.start : 1;
+    const qtyN = Math.min(Math.max(parseInt(data.qty, 10) || 0, 0), n);
+    const tolStr = r => {
+      if (!r.tol) return '';
+      const t = String(r.tol).replace(/[±+\-\s]/g, '');
+      if (r.tolMode === 'plus') return '+' + t;
+      if (r.tolMode === 'minus') return '-' + t;
+      return '± ' + t;
+    };
     const head = [['#', 'Parameter', 'Specification', 'Tolerance', 'Instrument',
-      ...Array.from({ length: n }, (_, i) => start ? 'S/N ' + (start + i) : 'R' + (i + 1)),
+      ...Array.from({ length: n }, (_, i) => i < qtyN ? 'S/N ' + (start + i) : String(i + 1)),
       ...(hasTap ? ['Tapping'] : [])]];
     const body = rows.map((r, i) => [
-      i + 1, r.parameter, r.spec,
-      r.tol ? (String(r.tol).includes('±') ? r.tol : '± ' + r.tol) : '',
-      r.instrument,
+      i + 1, r.parameter, r.spec, tolStr(r), r.instrument,
       ...r.r.slice(0, n).map(v => v === undefined ? '' : String(v)),
       ...(hasTap ? [r.tapped ? (r.tapResult || '—') : ''] : []),
     ]);
@@ -150,11 +156,11 @@ SCI.pdf = (() => {
       styles: { font: 'helvetica', fontSize: 8.5, cellPadding: 1.8, lineColor: LINE, lineWidth: 0.15, textColor: [30, 37, 48] },
       headStyles: { fillColor: NAVY, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
       columnStyles: {
-        0: { halign: 'center', cellWidth: 8 },
-        1: { cellWidth: 42 },
-        2: { halign: 'center', cellWidth: 24 },
-        3: { halign: 'center', cellWidth: 20 },
-        4: { cellWidth: 26 },
+        0: { halign: 'center', cellWidth: 7 },
+        1: { cellWidth: 36 },
+        2: { halign: 'center', cellWidth: 22 },
+        3: { halign: 'center', cellWidth: 18 },
+        4: { cellWidth: 24 },
       },
       didParseCell(hook) {
         if (hook.section !== 'body' || hook.column.index < 5) return;
@@ -162,7 +168,7 @@ SCI.pdf = (() => {
         const row = rows[hook.row.index];
         if (hook.column.index < 5 + n) {
           const reading = row.r[hook.column.index - 5];
-          if (SCI.isOutOfTol(row.spec, row.tol, reading)) {
+          if (SCI.isOutOfTol(row.spec, row.tol, reading, row.tolMode)) {
             hook.cell.styles.textColor = RED;
             hook.cell.styles.fontStyle = 'bold';
             hook.cell.styles.fillColor = [253, 236, 234];
@@ -209,7 +215,18 @@ SCI.pdf = (() => {
 
   function drawTextarea(doc, sec, data, y) {
     const text = (data[sec.key] || '').trim();
-    if (!text) return y;
+    if (!text && !sec.alwaysShow) return y;
+    if (!text) {
+      /* empty but always shown: ruled lines to write on after printing */
+      y = ensureRoom(doc, y, 12 + 3 * 8);
+      y = sectionTitle(doc, sec.title || 'Remarks', y);
+      doc.setDrawColor(...LINE);
+      doc.setLineWidth(0.25);
+      for (let k = 0; k < 3; k++) {
+        doc.line(MARGIN + 1, y + 4 + k * 8, PAGE_W - MARGIN, y + 4 + k * 8);
+      }
+      return y + 4 + 3 * 8 + 3;
+    }
     const lines = doc.splitTextToSize(text, PAGE_W - MARGIN * 2 - 2);
     y = ensureRoom(doc, y, 12 + lines.length * 4.5);
     y = sectionTitle(doc, sec.title || 'Remarks', y);

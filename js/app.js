@@ -125,7 +125,7 @@
     return data;
   }
 
-  const blankRow = sec => ({ parameter: '', spec: '', tol: '', instrument: '', tapped: false, tapResult: '', r: Array(sec.maxReadings || 10).fill('') });
+  const blankRow = sec => ({ parameter: '', spec: '', tol: '', tolMode: 'pm', instrument: '', tapped: false, tapResult: '', r: Array(sec.maxReadings || 10).fill('') });
 
   async function renderReportList() {
     const listEl = $('#report-list');
@@ -314,30 +314,29 @@
       buildTable();
     });
 
-    tools.append(btnAdd, el('span', 'tol-hint', 'One column per piece (follows Qty) — each cell is that parameter measured on that serial number. Out-of-tolerance turns red.'));
+    tools.append(btnAdd, el('span', 'tol-hint', 'All 10 boxes always shown — columns headed S/N belong to this batch’s pieces. Out-of-tolerance turns red.'));
     card.append(tools);
 
-    /* column count follows Qty (1–10); serial headers follow Piece Results start */
-    const colCount = () => {
-      const q = parseInt(current.report.data.qty, 10);
-      if (q >= 1) return Math.min(q, sec.maxReadings || 10);
-      return Math.min(m.readings || sec.defaultReadings || 5, sec.maxReadings || 10);
-    };
+    /* always 10 boxes; the first Qty columns are headed with real serial numbers */
+    const MAXR = sec.maxReadings || 10;
+    const qtyN = () => Math.min(Math.max(parseInt(current.report.data.qty, 10) || 0, 0), MAXR);
     const serialStart = () => {
       const pr = current.report.data.pieceResults;
       return pr && pr.start ? pr.start : 1;
     };
-    let builtCols = null, builtStart = null;
+    let builtQty = null, builtStart = null;
 
     function buildTable() {
-      m.readings = colCount();
-      builtCols = m.readings;
+      m.readings = MAXR;
+      builtQty = qtyN();
       builtStart = serialStart();
       table.innerHTML = '';
       const thead = el('thead');
       const hr = el('tr');
-      ['#', 'Parameter', 'Specification', 'Tolerance ±', 'Instrument', 'Tapped hole'].forEach(h => hr.append(el('th', null, h)));
-      for (let i = 0; i < m.readings; i++) hr.append(el('th', null, 'S/N ' + (builtStart + i)));
+      ['#', 'Parameter', 'Specification', 'Tolerance', 'Instrument', 'Tapped hole'].forEach(h => hr.append(el('th', null, h)));
+      for (let i = 0; i < MAXR; i++) {
+        hr.append(el('th', i < builtQty ? null : 'th-extra', i < builtQty ? 'S/N ' + (builtStart + i) : String(i + 1)));
+      }
       hr.append(el('th', null, ''));
       thead.append(hr);
       table.append(thead);
@@ -361,7 +360,36 @@
           td.append(inp);
           return td;
         };
-        tr.append(mkCell('parameter'), mkCell('spec', null, '92px'), mkCell('tol', null, '84px'), mkCell('instrument', null, '104px'));
+        tr.append(mkCell('parameter'), mkCell('spec', null, '92px'));
+
+        /* tolerance: direction (± / + / −) plus value */
+        const tdTol = el('td');
+        const tolWrap = el('div', 'tol-wrap');
+        const modeSel = el('select', 'tol-mode');
+        [['pm', '±'], ['plus', '+'], ['minus', '−']].forEach(([v, l]) => {
+          const o = el('option', null, l);
+          o.value = v;
+          modeSel.append(o);
+        });
+        modeSel.value = row.tolMode || 'pm';
+        modeSel.title = '± both ways, + upward only, − downward only';
+        modeSel.addEventListener('change', () => {
+          row.tolMode = modeSel.value;
+          markDirty();
+          refreshRowTol(tr, row);
+        });
+        const tolIn = el('input');
+        tolIn.style.width = '64px';
+        tolIn.inputMode = 'decimal';
+        tolIn.value = row.tol;
+        tolIn.addEventListener('input', () => {
+          row.tol = tolIn.value;
+          markDirty();
+          refreshRowTol(tr, row);
+        });
+        tolWrap.append(modeSel, tolIn);
+        tdTol.append(tolWrap);
+        tr.append(tdTol, mkCell('instrument', null, '104px'));
 
         const tdTap = el('td', 'tap-cell');
         const tap = el('input');
@@ -432,9 +460,9 @@
     }
 
     buildTable();
-    /* rebuild only when Qty or serial start actually changed */
+    /* rebuild only when Qty or serial start actually changed (headers) */
     current._mSync = () => {
-      if (colCount() !== builtCols || serialStart() !== builtStart) buildTable();
+      if (qtyN() !== builtQty || serialStart() !== builtStart) buildTable();
     };
   }
 
@@ -443,14 +471,18 @@
     const v = parseFloat(String(t).replace(/[±+\s]/g, ''));
     return isNaN(v) ? null : Math.abs(v);
   };
-  SCI.isOutOfTol = (spec, tol, reading) => {
+  /* mode: 'pm' (spec ± tol), 'plus' (spec … spec+tol), 'minus' (spec−tol … spec) */
+  SCI.isOutOfTol = (spec, tol, reading, mode) => {
     const s = parseFloat(spec), t = SCI.parseTol(tol), r = parseFloat(reading);
     if (isNaN(s) || t === null || isNaN(r) || String(reading).trim() === '') return false;
-    return Math.abs(r - s) > t + 1e-9;
+    const e = 1e-9;
+    if (mode === 'plus') return r < s - e || r > s + t + e;
+    if (mode === 'minus') return r > s + e || r < s - t - e;
+    return Math.abs(r - s) > t + e;
   };
 
   function applyTolClass(inp, row) {
-    inp.classList.toggle('out-tol', SCI.isOutOfTol(row.spec, row.tol, inp.value));
+    inp.classList.toggle('out-tol', SCI.isOutOfTol(row.spec, row.tol, inp.value, row.tolMode));
   }
 
   /* --- piece results: one verdict per physical piece --- */
@@ -495,7 +527,7 @@
         for (let i = 0; i < qty; i++) {
           let bad = false;
           (m ? m.rows : []).forEach(row => {
-            if (SCI.isOutOfTol(row.spec, row.tol, row.r[i])) bad = true;
+            if (SCI.isOutOfTol(row.spec, row.tol, row.r[i], row.tolMode)) bad = true;
             if (row.tapped && row.tapResult === 'Not OK') bad = true;
           });
           if (!pr.results[i]) pr.results[i] = bad ? null : 'ok';

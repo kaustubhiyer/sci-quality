@@ -51,6 +51,7 @@ SCI.registerForm({
       title: 'Remarks',
       label: 'Remarks / observations',
       placeholder: 'e.g. M6 tap has been found OK',
+      alwaysShow: true, // printed with ruled lines even when empty
     },
     {
       type: 'fields',
