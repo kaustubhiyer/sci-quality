@@ -28,6 +28,7 @@ SCI.registerForm({
       defaultRows: 5,
       maxReadings: 10,
       defaultReadings: 5,
+      minRows: 10, // PDF always prints at least 10 rows; extras stay blank for handwriting
     },
     {
       type: 'pieceResults',

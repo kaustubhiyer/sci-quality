@@ -123,7 +123,8 @@ SCI.pdf = (() => {
     const m = data[sec.key];
     if (!m) return y;
     const rows = m.rows.filter(r => r.parameter || r.spec || r.r.some(v => String(v).trim() !== ''));
-    if (!rows.length) return y;
+    const minRows = sec.minRows || 0;
+    if (!rows.length && !minRows) return y;
 
     y = ensureRoom(doc, y, 30);
     y = sectionTitle(doc, sec.title || 'Measurements', y);
@@ -150,6 +151,10 @@ SCI.pdf = (() => {
       ...r.r.slice(0, n).map(v => v === undefined ? '' : String(v)),
       ...(hasTap ? [r.tapped ? (r.tapResult || '—') : ''] : []),
     ]);
+    /* pad to minRows so printed reports always have blank lines to write on */
+    for (let i = rows.length; i < minRows; i++) {
+      body.push([i + 1, '', '', '', '', ...Array(n).fill(''), ...(hasTap ? [''] : [])]);
+    }
 
     doc.autoTable({
       head, body,
@@ -166,9 +171,11 @@ SCI.pdf = (() => {
         4: { cellWidth: 24 },
       },
       didParseCell(hook) {
-        if (hook.section !== 'body' || hook.column.index < 5) return;
-        hook.cell.styles.halign = 'center';
+        if (hook.section !== 'body') return;
         const row = rows[hook.row.index];
+        if (!row) { hook.cell.styles.minCellHeight = 7; return; } /* blank padding row, tall enough to write in */
+        if (hook.column.index < 5) return;
+        hook.cell.styles.halign = 'center';
         if (hook.column.index < 5 + n) {
           const reading = row.r[hook.column.index - 5];
           if (SCI.isOutOfTol(row.spec, row.tol, reading, row.tolMode)) {
