@@ -293,7 +293,6 @@ h1, h2, h3, h4 { margin: 0; }
 .m-table input.reading { min-width: 58px; text-align: center; }
 .m-table .out-tol { background: var(--danger-soft) !important; border-color: var(--danger) !important; color: var(--danger); font-weight: 700; }
 .m-table td.tap-cell { text-align: center; white-space: nowrap; }
-.m-table th.th-extra { color: #b2bdc9; font-weight: 600; }
 .tol-wrap { display: flex; gap: 3px; align-items: center; }
 .tol-wrap select.tol-mode {
   border: 1px solid var(--line); border-radius: 9px;

@@ -284,9 +284,15 @@
         input = el('input');
         input.type = f.input || 'text';
         if (f.input === 'number') input.inputMode = 'decimal';
+        if (f.max) input.max = f.max;
+        if (f.min) input.min = f.min;
       }
       input.value = current.report.data[f.key] || '';
       input.addEventListener('input', () => {
+        if (f.max && parseFloat(input.value) > f.max) {
+          input.value = String(f.max);
+          SCI.toast(f.maxMsg || 'Maximum ' + f.max + ' allowed');
+        }
         current.report.data[f.key] = input.value;
         markDirty();
       });
@@ -314,29 +320,31 @@
       buildTable();
     });
 
-    tools.append(btnAdd, el('span', 'tol-hint', 'All 10 boxes always shown — columns headed S/N belong to this batch’s pieces. Out-of-tolerance turns red.'));
+    tools.append(btnAdd, el('span', 'tol-hint', 'One reading box per piece — boxes follow Qty (max 10), headed with the piece serial numbers. Out-of-tolerance turns red.'));
     card.append(tools);
 
-    /* always 10 boxes; the first Qty columns are headed with real serial numbers */
+    /* one column per piece: count follows Qty (capped at 10) */
     const MAXR = sec.maxReadings || 10;
-    const qtyN = () => Math.min(Math.max(parseInt(current.report.data.qty, 10) || 0, 0), MAXR);
+    const colCount = () => {
+      const q = parseInt(current.report.data.qty, 10);
+      if (q >= 1) return Math.min(q, MAXR);
+      return Math.min(sec.defaultReadings || 5, MAXR);
+    };
     const serialStart = () => {
       const pr = current.report.data.pieceResults;
       return pr && pr.start ? pr.start : 1;
     };
-    let builtQty = null, builtStart = null;
+    let builtCols = null, builtStart = null;
 
     function buildTable() {
-      m.readings = MAXR;
-      builtQty = qtyN();
+      m.readings = colCount();
+      builtCols = m.readings;
       builtStart = serialStart();
       table.innerHTML = '';
       const thead = el('thead');
       const hr = el('tr');
       ['#', 'Parameter', 'Specification', 'Tolerance', 'Instrument', 'Tapped hole'].forEach(h => hr.append(el('th', null, h)));
-      for (let i = 0; i < MAXR; i++) {
-        hr.append(el('th', i < builtQty ? null : 'th-extra', i < builtQty ? 'S/N ' + (builtStart + i) : String(i + 1)));
-      }
+      for (let i = 0; i < m.readings; i++) hr.append(el('th', null, 'S/N ' + (builtStart + i)));
       hr.append(el('th', null, ''));
       thead.append(hr);
       table.append(thead);
@@ -460,9 +468,9 @@
     }
 
     buildTable();
-    /* rebuild only when Qty or serial start actually changed (headers) */
+    /* rebuild only when Qty or serial start actually changed */
     current._mSync = () => {
-      if (qtyN() !== builtQty || serialStart() !== builtStart) buildTable();
+      if (colCount() !== builtCols || serialStart() !== builtStart) buildTable();
     };
   }
 

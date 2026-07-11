@@ -128,10 +128,13 @@ SCI.pdf = (() => {
     y = ensureRoom(doc, y, 30);
     y = sectionTitle(doc, sec.title || 'Measurements', y);
 
-    const n = m.readings;
+    /* one reading column per piece: count follows Qty (older reports may have
+     * stored more reading slots than pieces) */
+    const cap = m.readings || 10;
+    const qtyN = Math.min(Math.max(parseInt(data.qty, 10) || 0, 0), cap);
+    const n = qtyN >= 1 ? qtyN : cap;
     const hasTap = rows.some(r => r.tapped);
     const start = data.pieceResults && data.pieceResults.start ? data.pieceResults.start : 1;
-    const qtyN = Math.min(Math.max(parseInt(data.qty, 10) || 0, 0), n);
     const tolStr = r => {
       if (!r.tol) return '';
       const t = String(r.tol).replace(/[±+\-\s]/g, '');
@@ -140,7 +143,7 @@ SCI.pdf = (() => {
       return '± ' + t;
     };
     const head = [['#', 'Parameter', 'Specification', 'Tolerance', 'Instrument',
-      ...Array.from({ length: n }, (_, i) => i < qtyN ? 'S/N ' + (start + i) : String(i + 1)),
+      ...Array.from({ length: n }, (_, i) => 'S/N ' + (start + i)),
       ...(hasTap ? ['Tapping'] : [])]];
     const body = rows.map((r, i) => [
       i + 1, r.parameter, r.spec, tolStr(r), r.instrument,

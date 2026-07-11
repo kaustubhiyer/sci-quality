@@ -14,7 +14,7 @@ SCI.registerForm({
         { key: 'customer', label: 'Customer', input: 'text' },
         { key: 'partDescription', label: 'Part Description', input: 'text' },
         { key: 'partNo', label: 'Part No.', input: 'text' },
-        { key: 'qty', label: 'Qty', input: 'number' },
+        { key: 'qty', label: 'Qty', input: 'number', min: 1, max: 10, maxMsg: 'Max 10 pieces per report — split larger lots into separate reports' },
         { key: 'poNo', label: 'P.O. No.', input: 'text' },
         { key: 'woNo', label: 'WO No.', input: 'text' },
         { key: 'grnNo', label: 'GRN No.', input: 'text' },
@@ -78,7 +78,8 @@ SCI.registerForm({
 
   fileName(data) {
     const safe = s => (s || '').replace(/[^\w\-]+/g, '-').replace(/^-+|-+$/g, '');
-    return ['Inspection-Report', safe(data.partNo), data.date].filter(Boolean).join('_');
+    /* file is named after the part number, e.g. "PN-1234_Inspection-Report_2026-07-11.pdf" */
+    return [safe(data.partNo), 'Inspection-Report', data.date].filter(Boolean).join('_');
   },
 
   emailText(data) {
